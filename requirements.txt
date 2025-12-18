@@ -1,6 +1,7 @@
 discord.py
 yt-dlp
 python-dotenv
-requests
+PyNaCl
 lyricsgenius
 beautifulsoup4
+requests
