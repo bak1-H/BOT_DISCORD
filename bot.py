@@ -4,6 +4,9 @@ import yt_dlp
 import asyncio
 import os
 from dotenv import load_dotenv
+import requests
+import lyricsgenius
+
 
 load_dotenv()
 
@@ -12,8 +15,18 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+genius = lyricsgenius.Genius(
+    os.getenv("GENIUS_TOKEN"),
+    skip_non_songs=True,
+    excluded_terms=["(Remix)", "(Live)"],
+    remove_section_headers=True
+)
+
+
 # Cola de canciones por servidor
 queues = {}
+current_song = {}
+
 
 ytdlp_opts = {
     'format': 'bestaudio/best',
@@ -44,6 +57,8 @@ async def play_next(ctx):
         info = ydl.extract_info(url, download=False)
         audio_url = info['url']
         title = info['title']
+        current_song[ctx.guild.id] = title
+
 
     ffmpeg_opts = {
         "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -95,6 +110,8 @@ async def play(ctx, *, search):
     queue = get_queue(ctx.guild.id)
     queue.append(url)
 
+
+
     ## Se muestra al agregar la segunda cancion
     if len(queue) > 1:
         await ctx.send(f"➕ **{title}** ha sido añadida a la cola")
@@ -137,9 +154,57 @@ async def clear(ctx):
     await ctx.send("🗑️ Cola limpiada")
 
 @bot.command()
-async def clearchat(ctx):
-    deleted = await ctx.channel.purge(limit=100)
-    await ctx.send(f"🗑️ {len(deleted)} mensajes eliminados",delete_after=5)
+@commands.has_permissions(manage_messages=True)
+async def clearchat(ctx, limit: int = 100):
+    """Elimina mensajes del chat. Requiere permisos de 'Gestionar mensajes'."""
+    if not ctx.guild.me.guild_permissions.manage_messages:
+        return await ctx.send("❌ No tengo permisos para gestionar mensajes")
+    
+    try:
+        deleted = await ctx.channel.purge(limit=limit)
+        await ctx.send(f"🗑️ {len(deleted)} mensajes eliminados", delete_after=5)
+    except discord.Forbidden:
+        await ctx.send("❌ No tengo permisos para eliminar mensajes en este canal")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ Error al eliminar mensajes: {e}")
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Manejo global de errores de comandos"""
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ No tienes permisos para usar este comando")
+    elif isinstance(error, commands.CommandNotFound):
+        pass  # Ignorar comandos no encontrados
+    else:
+        print(f"Error en comando {ctx.command}: {error}")
+
+
+@bot.command()
+async def lyrics(ctx):
+    title = current_song.get(ctx.guild.id)
+
+    if not title:
+        return await ctx.send("❌ No hay ninguna canción sonando")
+
+    # Limpieza básica del título
+    clean_title = title.replace("(Official Video)", "").replace("(Lyrics)", "").strip()
+
+    try:
+        song = genius.search_song(clean_title)
+    except Exception as e:
+        return await ctx.send("❌ Error al buscar la letra")
+
+    if not song or not song.lyrics:
+        return await ctx.send("❌ No se encontraron lyrics en Genius")
+
+    lyrics = song.lyrics
+
+    # Límite Discord 2000 chars
+    for i in range(0, len(lyrics), 1900):
+        await ctx.send(f"```{lyrics[i:i+1900]}```")
+
+
 
 @bot.command()
 async def comandos(ctx):
@@ -151,9 +216,15 @@ async def comandos(ctx):
     `!stop` - Detener la música y desconectar
     `!cola` - Mostrar la cola de canciones
     `!clear` - Limpiar la cola de canciones
-    `!clearchat` - Eliminar mensajes del chat
+    `!clearchat [cantidad]` - Eliminar mensajes del chat
+    `!lyrics` - Mostrar la letra de la canción actual
+
     `!comandos` - Mostrar esta lista de comandos
     """
     await ctx.send(comandos_list)
+
+
+
+
 
 bot.run(os.getenv("DISCORD_TOKEN"))
