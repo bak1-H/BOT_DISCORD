@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 import requests
 import lyricsgenius
-
+import re
 
 load_dotenv()
 
@@ -180,6 +180,44 @@ async def on_command_error(ctx, error):
         print(f"Error en comando {ctx.command}: {error}")
 
 
+def clean_title_for_genius(title: str):
+    original = title
+
+    # Quitar contenido entre () y []
+    title = re.sub(r"\(.*?\)", "", title)
+    title = re.sub(r"\[.*?\]", "", title)
+
+    # Quitar palabras comunes basura
+    blacklist = [
+        "official video", "official music video", "lyrics", "lyric video",
+        "audio", "hd", "hq", "remastered", "explicit", "video",
+        "4k", "visualizer"
+    ]
+
+    for word in blacklist:
+        title = re.sub(word, "", title, flags=re.IGNORECASE)
+
+    # Quitar ft / feat
+    title = re.sub(r"ft\.?.*", "", title, flags=re.IGNORECASE)
+    title = re.sub(r"feat\.?.*", "", title, flags=re.IGNORECASE)
+
+    # Quitar emojis y símbolos raros
+    title = re.sub(r"[^\w\s\-]", "", title)
+
+    # Normalizar espacios
+    title = re.sub(r"\s+", " ", title).strip()
+
+    # Separar artista - canción
+    if "-" in title:
+        artist, song = title.split("-", 1)
+        return artist.strip(), song.strip()
+
+    # Fallback: no se pudo separar
+    return None, title.strip()
+
+
+
+
 @bot.command()
 async def lyrics(ctx):
     title = current_song.get(ctx.guild.id)
@@ -187,20 +225,21 @@ async def lyrics(ctx):
     if not title:
         return await ctx.send("❌ No hay ninguna canción sonando")
 
-    # Limpieza básica del título
-    clean_title = title.replace("(Official Video)", "").replace("(Lyrics)", "").strip()
+    artist, song = clean_title_for_genius(title)
 
     try:
-        song = genius.search_song(clean_title)
-    except Exception as e:
-        return await ctx.send("❌ Error al buscar la letra")
+        if artist:
+            song_data = genius.search_song(song, artist)
+        else:
+            song_data = genius.search_song(song)
+    except Exception:
+        return await ctx.send("❌ Error al buscar lyrics en Genius")
 
-    if not song or not song.lyrics:
-        return await ctx.send("❌ No se encontraron lyrics en Genius")
+    if not song_data or not song_data.lyrics:
+        return await ctx.send("❌ No se encontraron lyrics")
 
-    lyrics = song.lyrics
+    lyrics = song_data.lyrics
 
-    # Límite Discord 2000 chars
     for i in range(0, len(lyrics), 1900):
         await ctx.send(f"```{lyrics[i:i+1900]}```")
 
