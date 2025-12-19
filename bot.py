@@ -203,14 +203,15 @@ async def cola(ctx):
 
 
 # =========================
-
+# LIMPIAR CHAT DE MENSAJES EN GENERAL
+# =========================
 @bot.command()
-async def clearchat(ctx):
-    def is_bot(m):
-        return m.author == bot.user
-
-    deleted = await ctx.channel.purge(limit=1000, check=is_bot)
-    await ctx.send(f"🧹 Borrados {len(deleted)} mensajes del bot.", delete_after=5)
+async def clearchat(ctx, amount: int = 5):
+    if ctx.author.guild_permissions.manage_messages:
+        deleted = await ctx.channel.purge(limit=amount)
+        await ctx.send(f"🧹 Borrados {len(deleted)} mensajes.", delete_after=5)
+    else:
+        await ctx.send("❌ No tienes permisos para borrar mensajes.")
 
 
 @bot.command()
@@ -278,6 +279,8 @@ async def comandos(ctx):
     `!skip` - Saltar la canción actual
     `!stop` - Detener la música y desconectar
     `!cola` - Mostrar la cola de canciones
+    `!clearchat <n>` - Borrar los últimos n mensajes (por defecto 5)
+    `!repo` - Mostrar el enlace al repositorio del bot  
     `!lyrics` - Obtener las letras de la canción actual
     `!comandos` - Mostrar esta lista de comandos
     """
