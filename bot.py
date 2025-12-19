@@ -10,6 +10,14 @@ import functools
 
 load_dotenv()
 
+COOKIES_ENV = os.getenv("YTDLP_COOKIES")
+
+if COOKIES_ENV:
+    with open("cookies.txt", "w", encoding="utf-8") as f:
+        f.write(COOKIES_ENV)
+
+
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -42,6 +50,8 @@ ytdlp_opts = {
     "quiet": True,
     "default_search": "ytsearch1",
     "outtmpl": "%(id)s.%(ext)s",
+    "cookies": "cookies.txt", 
+    "socket_timeout": 10,
 }
 
 # =========================
