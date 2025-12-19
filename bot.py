@@ -52,12 +52,6 @@ ytdlp_opts = {
     "outtmpl": "%(id)s.%(ext)s",
     "cookies": "cookies.txt",
     "socket_timeout": 10,
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["android"],  # 🔑 CLAVE
-            "skip": ["webpage"],
-        }
-    }
 }
 
 # =========================
