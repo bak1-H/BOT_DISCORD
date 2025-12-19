@@ -16,8 +16,6 @@ if COOKIES_ENV:
     with open("cookies.txt", "w", encoding="utf-8") as f:
         f.write(COOKIES_ENV)
 
-
-
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -207,9 +205,18 @@ async def cola(ctx):
 # =========================
 
 @bot.command()
-async def clear(ctx):
-    get_queue(ctx.guild.id).clear()
-    await ctx.send("🗑️ Cola limpiada")
+async def clearchat(ctx):
+    def is_bot(m):
+        return m.author == bot.user
+
+    deleted = await ctx.channel.purge(limit=1000, check=is_bot)
+    await ctx.send(f"🧹 Borrados {len(deleted)} mensajes del bot.", delete_after=5)
+
+
+@bot.command()
+async def repo(ctx):
+    await ctx.send("🔗 Repositorio del bot: https://github.com/bak1-H/BOT_DISCORD")
+
 
 # =========================
 # LYRICS
@@ -261,6 +268,22 @@ async def lyrics(ctx):
     for i in range(0, len(lyrics), 1900):
         await ctx.send(f"```{lyrics[i:i+1900]}```")
 
+
+@bot.command()
+async def comandos(ctx):
+    comandos_lista = """
+    **Comandos disponibles:**
+    `!join` - Conectar al canal de voz
+    `!play <canción>` - Reproducir una canción o añadir a la cola
+    `!skip` - Saltar la canción actual
+    `!stop` - Detener la música y desconectar
+    `!cola` - Mostrar la cola de canciones
+    `!lyrics` - Obtener las letras de la canción actual
+    `!comandos` - Mostrar esta lista de comandos
+    """
+    await ctx.send(comandos_lista)
+
+
 # =========================
 # ERRORES
 # =========================
@@ -269,5 +292,8 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     await ctx.send(f"Error: {error}")
+
+
+
 
 bot.run(os.getenv("DISCORD_TOKEN"))
