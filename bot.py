@@ -29,7 +29,9 @@ genius = lyricsgenius.Genius(
     os.getenv("GENIUS_TOKEN"),
     skip_non_songs=True,
     excluded_terms=["(Remix)", "(Live)"],
-    remove_section_headers=True
+    remove_section_headers=True,
+    timeout=15,
+    retries=3
 )
 
 # =========================
@@ -144,9 +146,6 @@ async def play(ctx, *, search: str = None):
     if "playlist" in search.lower() or "list=" in search:
         return await ctx.send("Playlists no soportadas")
 
-    if not ctx.author.voice:
-        return await ctx.send("Debes estar en un canal de voz")
-
     if not ctx.voice_client:
         await ctx.author.voice.channel.connect()
 
@@ -155,7 +154,7 @@ async def play(ctx, *, search: str = None):
     try:
         info = await ytdlp_extract(loop, f"ytsearch1:{search}", download=False)
     except Exception:
-        return await ctx.send("Error buscando la canción")
+        return await ctx.send("❌ Error buscando la canción")
 
     if not info or "entries" not in info or not info["entries"]:
         return await ctx.send("No se encontraron resultados")
@@ -170,7 +169,7 @@ async def play(ctx, *, search: str = None):
     if ctx.voice_client.is_playing():
         await ctx.send(f"**{title}** añadida a la cola")
     else:
-        await ctx.send(f"Reproduciendo: **{title}**")
+        await ctx.send(f"🎶 Reproduciendo: **{title}**")
         await play_next(ctx)
 
 
@@ -181,7 +180,7 @@ async def play(ctx, *, search: str = None):
 async def skip(ctx):
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
-        await ctx.send("⏭Canción saltada")
+        await ctx.send("⏭ Canción saltada")
 
 # =========================
 
@@ -191,7 +190,7 @@ async def stop(ctx):
     get_queue(ctx.guild.id).clear()
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("⏹Música detenida")
+        await ctx.send("⏹ Música detenida")
 
 # =========================
 
@@ -233,21 +232,34 @@ def clean_title_for_genius(title: str):
 @bot.command()
 async def lyrics(ctx):
     title = current_song.get(ctx.guild.id)
+
     if not title:
-        return await ctx.send("No hay canción sonando")
+        return await ctx.send("❌ No hay canción sonando")
 
     artist, song = clean_title_for_genius(title)
 
+    await ctx.send(f"🔍 Buscando lyrics: **{artist or ''} {song}**")
+
     try:
-        data = genius.search_song(song, artist) if artist else genius.search_song(song)
-    except Exception:
-        return await ctx.send("Error buscando lyrics")
+        song_data = (
+            genius.search_song(song, artist)
+            if artist
+            else genius.search_song(song)
+        )
+    except Exception as e:
+        print("GENIUS ERROR:", e)
+        return await ctx.send("❌ Error conectando con Genius")
 
-    if not data or not data.lyrics:
-        return await ctx.send("Lyrics no encontradas")
+    if not song_data:
+        return await ctx.send("❌ Genius no encontró la canción")
 
-    for i in range(0, len(data.lyrics), 1900):
-        await ctx.send(f"```{data.lyrics[i:i+1900]}```")
+    if not song_data.lyrics:
+        return await ctx.send("❌ La canción no tiene lyrics disponibles")
+
+    lyrics = song_data.lyrics
+
+    for i in range(0, len(lyrics), 1900):
+        await ctx.send(f"```{lyrics[i:i+1900]}```")
 
 # =========================
 # ERRORES
