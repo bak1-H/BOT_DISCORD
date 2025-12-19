@@ -86,8 +86,14 @@ async def play_next(ctx):
 
     try:
         info = await ytdlp_extract(loop, url, download=True)
-    except Exception:
-        await ctx.send("❌ Error al reproducir, saltando canción")
+    except Exception as e:
+        msg = str(e).lower()
+
+        if "confirm your age" in msg or "age" in msg:
+            await ctx.send("🔞 Canción bloqueada por restricción de edad, se omitió.")
+        else:
+            await ctx.send("❌ Error al reproducir, se omitió la canción.")
+
         return await play_next(ctx)
 
     if "entries" in info:
