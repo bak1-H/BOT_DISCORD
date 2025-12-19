@@ -217,17 +217,48 @@ async def repo(ctx):
 # LYRICS
 # =========================
 def clean_title_for_genius(title: str):
+    # Quitar contenido entre () y []
     title = re.sub(r"\(.*?\)|\[.*?\]", "", title)
-    title = re.sub(r"(official|lyrics|video|hd|hq|audio|remastered)", "", title, flags=re.I)
-    title = re.sub(r"ft\.?.*|feat\.?.*", "", title, flags=re.I)
-    title = re.sub(r"[^\w\s\-]", "", title)
+
+    # Normalizar separadores comunes
+    title = re.sub(r"\b(ft\.?|feat\.?|featuring|x|with)\b", "&", title, flags=re.I)
+
+    # Quitar palabras basura
+    title = re.sub(
+        r"(official|lyrics|video|hd|hq|audio|remastered|visualizer)",
+        "",
+        title,
+        flags=re.I,
+    )
+
+    # Quitar emojis y símbolos raros (pero mantener & y -)
+    title = re.sub(r"[^\w\s\-&]", "", title)
+
+    # Normalizar espacios
     title = re.sub(r"\s+", " ", title).strip()
 
+    # Separar artista - canción
     if "-" in title:
         artist, song = title.split("-", 1)
-        return artist.strip(), song.strip()
+    else:
+        # fallback si no hay "-"
+        return None, title.strip()
 
-    return None, title
+    artist = artist.strip()
+    song = song.strip()
+
+    # Detectar artistas pegados sin separador claro
+    if "&" not in artist:
+        words = artist.split()
+        if len(words) >= 4:
+            # Heurística simple: unir en dos bloques
+            mid = len(words) // 2
+            artist = " ".join(words[:mid]) + " & " + " ".join(words[mid:])
+
+    # Normalizar espacios alrededor de &
+    artist = re.sub(r"\s*&\s*", " & ", artist)
+
+    return artist, song
 
 # =========================
 
