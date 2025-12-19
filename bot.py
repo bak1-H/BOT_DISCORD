@@ -216,83 +216,116 @@ async def repo(ctx):
 # =========================
 # LYRICS
 # =========================
-def clean_title_for_genius(title: str):
-    # Quitar contenido entre () y []
+def clean_title_for_genius(raw_title: str):
+    """
+    Devuelve (artist, song) y además variantes útiles para buscar en Genius.
+    - Intenta conservar feats (ft/feat/x/and/&)
+    - Normaliza conectores para que Genius encuentre colaboraciones
+    """
+    title = raw_title.strip()
+
+    # 1) Capturar feats dentro de ( ) o [ ] ANTES de borrarlos
+    # Ej: "Kidd Voodoo - Me Mareo (feat. JC Reyes)" -> feat_artists = ["JC Reyes"]
+    feat_artists = []
+    feat_matches = re.findall(r"[\(\[]([^)\]]+)[\)\]]", title)
+    for chunk in feat_matches:
+        if re.search(r"\b(ft\.?|feat\.?|featuring|with|x|&|and)\b", chunk, flags=re.I):
+            # limpia "feat. X" -> "X"
+            cleaned = re.sub(r"\b(ft\.?|feat\.?|featuring|with)\b\.?", "", chunk, flags=re.I).strip()
+            # separa por conectores
+            parts = re.split(r"\s*(?:&|and|x|,)\s*", cleaned, flags=re.I)
+            feat_artists.extend([p.strip() for p in parts if p.strip()])
+
+    # 2) Ahora sí: quitar ( ) y [ ]
     title = re.sub(r"\(.*?\)|\[.*?\]", "", title)
 
-    # Normalizar separadores comunes
-    title = re.sub(r"\b(ft\.?|feat\.?|featuring|x|with)\b", "&", title, flags=re.I)
+    # 3) Quitar basura típica
+    title = re.sub(r"(official|lyrics|lyric video|video|hd|hq|audio|remastered|visualizer|4k)",
+                   "", title, flags=re.I)
 
-    # Quitar palabras basura
-    title = re.sub(
-        r"(official|lyrics|video|hd|hq|audio|remastered|visualizer)",
-        "",
-        title,
-        flags=re.I,
-    )
-
-    # Quitar emojis y símbolos raros (pero mantener & y -)
+    # 4) Limpiar símbolos (mantener - y &)
     title = re.sub(r"[^\w\s\-&]", "", title)
-
-    # Normalizar espacios
     title = re.sub(r"\s+", " ", title).strip()
 
-    # Separar artista - canción
-    if "-" in title:
+    # 5) Separar "Artista - Canción"
+    artist = None
+    song = title
+    if " - " in title:
+        artist, song = title.split(" - ", 1)
+    elif "-" in title:
         artist, song = title.split("-", 1)
-    else:
-        # fallback si no hay "-"
-        return None, title.strip()
 
-    artist = artist.strip()
+    artist = artist.strip() if artist else None
     song = song.strip()
 
-    # Detectar artistas pegados sin separador claro
-    if "&" not in artist:
+    # 6) Si el artista viene “pegado” (ej: "Kidd Voodoo JC Reyes"), intentar partirlo en 2 bloques
+    # (heurística simple, funciona bien para nombres de 2 palabras + 2 palabras)
+    if artist and "&" not in artist and " and " not in artist.lower():
         words = artist.split()
-        if len(words) >= 4:
-            # Heurística simple: unir en dos bloques
-            mid = len(words) // 2
-            artist = " ".join(words[:mid]) + " & " + " ".join(words[mid:])
+        if len(words) == 4:
+            artist = f"{words[0]} {words[1]} and {words[2]} {words[3]}"
 
-    # Normalizar espacios alrededor de &
-    artist = re.sub(r"\s*&\s*", " & ", artist)
+    # 7) Incorporar feats capturados (si no estaban ya)
+    if artist and feat_artists:
+        # evita duplicados
+        for fa in feat_artists:
+            if fa.lower() not in artist.lower():
+                # preferimos "and" porque tu ejemplo de Genius usa "and"
+                artist = f"{artist} and {fa}"
+
+    # 8) Normalizar conectores a "and" (Genius suele aceptar mejor "and" que "&" en varios casos)
+    if artist:
+        artist = re.sub(r"\s*&\s*", " and ", artist)
+        artist = re.sub(r"\s+x\s+", " and ", artist, flags=re.I)
+        artist = re.sub(r"\s+", " ", artist).strip()
 
     return artist, song
+
 
 # =========================
 
 @bot.command()
 async def lyrics(ctx):
     title = current_song.get(ctx.guild.id)
-
     if not title:
         return await ctx.send("❌ No hay canción sonando")
 
     artist, song = clean_title_for_genius(title)
 
-    await ctx.send(f"🔍 Buscando lyrics: **{artist or ''} {song}**")
+    # Para depurar (ver qué se está buscando)
+    await ctx.send(f"🔍 Buscando lyrics: **{artist or ''} — {song}**")
 
     try:
-        song_data = (
-            genius.search_song(song, artist)
-            if artist
-            else genius.search_song(song)
-        )
+        song_data = None
+
+        # Intento 1: artista + canción
+        if artist:
+            song_data = genius.search_song(song, artist)
+
+        # Intento 2: solo canción (a veces funciona mejor)
+        if not song_data:
+            song_data = genius.search_song(song)
+
+        # Intento 3: query combinado (Genius a veces matchea mejor así)
+        if not song_data and artist:
+            song_data = genius.search_song(f"{song} {artist}")
+
+        # Intento 4: variante del conector (and <-> &)
+        if not song_data and artist:
+            artist_amp = artist.replace(" and ", " & ")
+            song_data = genius.search_song(song, artist_amp)
+
     except Exception as e:
         print("GENIUS ERROR:", e)
-        return await ctx.send("❌ Error conectando con Genius")
+        return await ctx.send("❌ Error al consultar Genius")
 
-    if not song_data:
-        return await ctx.send("❌ Genius no encontró la canción")
+    if not song_data or not song_data.lyrics:
+        return await ctx.send("❌ No se encontraron lyrics en Genius")
 
-    if not song_data.lyrics:
-        return await ctx.send("❌ La canción no tiene lyrics disponibles")
+    lyrics_text = song_data.lyrics
+    for i in range(0, len(lyrics_text), 1900):
+        await ctx.send(f"```{lyrics_text[i:i+1900]}```")
 
-    lyrics = song_data.lyrics
-
-    for i in range(0, len(lyrics), 1900):
-        await ctx.send(f"```{lyrics[i:i+1900]}```")
 
 
 @bot.command()
