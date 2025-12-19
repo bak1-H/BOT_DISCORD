@@ -50,8 +50,14 @@ ytdlp_opts = {
     "quiet": True,
     "default_search": "ytsearch1",
     "outtmpl": "%(id)s.%(ext)s",
-    "cookies": "cookies.txt", 
+    "cookies": "cookies.txt",
     "socket_timeout": 10,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android"],  # 🔑 CLAVE
+            "skip": ["webpage"],
+        }
+    }
 }
 
 # =========================
@@ -122,6 +128,8 @@ async def join(ctx):
     else:
         await ctx.send("Debes estar en un canal de voz")
 
+# =========================
+
 @bot.command()
 async def play(ctx, *, search: str = None):
     if not search:
@@ -159,11 +167,18 @@ async def play(ctx, *, search: str = None):
         await ctx.send(f"Reproduciendo: **{title}**")
         await play_next(ctx)
 
+
+# =========================
+
+
 @bot.command()
 async def skip(ctx):
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
         await ctx.send("⏭Canción saltada")
+
+# =========================
+
 
 @bot.command()
 async def stop(ctx):
@@ -172,6 +187,9 @@ async def stop(ctx):
         await ctx.voice_client.disconnect()
         await ctx.send("⏹Música detenida")
 
+# =========================
+
+
 @bot.command()
 async def cola(ctx):
     queue = get_queue(ctx.guild.id)
@@ -179,6 +197,9 @@ async def cola(ctx):
         return await ctx.send("📭 Cola vacía")
     msg = "\n".join(f"{i+1}. {q}" for i, q in enumerate(queue))
     await ctx.send(f"🎼 **Cola:**\n{msg}")
+
+
+# =========================
 
 @bot.command()
 async def clear(ctx):
@@ -200,6 +221,8 @@ def clean_title_for_genius(title: str):
         return artist.strip(), song.strip()
 
     return None, title
+
+# =========================
 
 @bot.command()
 async def lyrics(ctx):
