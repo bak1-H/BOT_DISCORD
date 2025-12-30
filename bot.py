@@ -7,10 +7,14 @@ from dotenv import load_dotenv
 import lyricsgenius
 import re
 import functools
+import requests
+import random
 
 load_dotenv()
 
 COOKIES_ENV = os.getenv("YTDLP_COOKIES")
+URL = "https://ddragon.leagueoflegends.com/cdn/14.1.1/data/es_ES/champion.json"
+
 
 if COOKIES_ENV:
     with open("cookies.txt", "w", encoding="utf-8") as f:
@@ -33,13 +37,58 @@ genius = lyricsgenius.Genius(
 )
 
 # =========================
-# ESTADO
+# ESTADOS
 # =========================
 queues = {}
 current_song = {}
 
+# =========================
+# RADIO SEARCHES
+# Sirve para reproducir mixes automáticos si se desea
+
+# =========================
+
+RADIO_SEARCHES = [
+    "lofi hip hop mix",
+    "rock mix 2025",
+    "pop hits mix",
+    "gaming music mix",
+    "electronic mix",
+    "trap mix",
+    "indie mix",
+    "reggaeton mix",
+    "nightcore mix",
+    "classical music mix",
+    "jazz mix",
+    "chillstep mix",
+    "synthwave mix",
+    "vaporwave mix",
+    "metal mix",
+    "punk rock mix",
+    "acoustic mix",
+    "k-pop mix",
+    "anime opening mix",
+    "video game soundtrack mix"
+]
+
+# =========================
+# Funcion para obtener una canción aleatoria de radio
+# =========================
+
+def get_random_radio_result():
+    search = random.choice(RADIO_SEARCHES)
+    with yt_dlp.YoutubeDL({"format": "bestaudio", "quiet": True}) as ydl:
+        info = ydl.extract_info(f"ytsearch5:{search}", download=False)
+        if not info or not info.get("entries"):
+            return None, None
+        video = random.choice(info["entries"])
+        return video["webpage_url"], video["title"]
+
+
+
 def get_queue(guild_id):
     return queues.setdefault(guild_id, [])
+
 
 # =========================
 # YT-DLP CONFIG (SEGURO)
@@ -108,7 +157,7 @@ async def play_next(ctx):
         asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
 
     ctx.voice_client.play(source, after=after_playing)
-    await ctx.send(f"🎶 Reproduciendo: **{title}**")
+    await ctx.send(f"🎶 En proceso con: **{title}**")
 
 # =========================
 # EVENTOS
@@ -129,6 +178,30 @@ async def join(ctx):
         await ctx.send("Debes estar en un canal de voz")
 
 # =========================
+
+
+@bot.command()
+async def radio(ctx):
+    if not ctx.author.voice:
+        return await ctx.send("❌ Debes estar en un canal de voz")
+
+    if not ctx.voice_client:
+        await ctx.author.voice.channel.connect()
+
+    url, title = get_random_radio_result()
+
+    if not url:
+        return await ctx.send("❌ No encontré música aleatoria, intenta otra vez")
+
+    queue = get_queue(ctx.guild.id)
+    queue.append(url)
+
+    await ctx.send(f"🎰 **Modo Radio activado**\nAñadida a la cola: **{title}**")
+
+    # Si no estaba sonando nada, inicia reproducción
+    if not ctx.voice_client.is_playing():
+        await play_next(ctx)
+
 
 @bot.command()
 async def play(ctx, *, search: str = None):
@@ -325,6 +398,19 @@ async def lyrics(ctx):
     lyrics_text = song_data.lyrics
     for i in range(0, len(lyrics_text), 1900):
         await ctx.send(f"```{lyrics_text[i:i+1900]}```")
+
+
+@bot.command()
+async def ruleta(ctx):
+    resp = requests.get(URL).json()
+    champ = random.choice(list(resp["data"].values()))
+
+    await ctx.send(
+        f"🎲 **RULETA DE CAMPEONES** 🎲\n"
+        f"🧙 Campeón: **{champ['name']}**\n"
+        f"📜 Título: *{champ['title']}*\n"
+        f"🎯 Rol: {', '.join(champ['tags'])}"
+    )
 
 
 
